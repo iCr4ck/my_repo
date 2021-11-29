@@ -1,0 +1,110 @@
+//Definieren der Schwellenwerte
+#define THRESHOLD 50  //Threshold value for line detection
+#define STATE_INIT 0  //Initial state
+#define STATE_SAFE_ON_TABLE 1  //Normal driving state
+#define STATE_DETECTED_EDGE 2  //state if a line-edge was detected
+#define STATE_DETECTED_OBJECT 3  //state in which the robot detected a object in front of him
+#define NEAR 20 //Threshold for the ultrasonic sensor to recognize a object
+
+
+//Function to initialize the light and ultrasonic sensors
+int initialize(){
+    SetSensorLight(IN_1);
+    SetSensorLight(IN_2);
+    SetSensorLight(IN_3);
+    SetSensorUltrasonic(IN_4);
+    return STATE_SAFE_ON_TABLE;
+}
+
+
+//Function that get executed when in normal drive state
+int drive(){
+    OnFwd(OUT_AB,50);
+    //Checking if the left sensor is lower than the threshold
+    // -> detected edge
+    if (Sensor(IN_1) < THRESHOLD && Sensor(IN_2) >= THRESHOLD){
+       return STATE_DETECTED_EDGE;
+    }
+    //Checking if the right sensor is lower than the threshold
+    // -> detected edge
+    if (Sensor(IN_2) < THRESHOLD && Sensor(IN_1) >= THRESHOLD){
+       return STATE_DETECTED_EDGE;
+    }
+    //Checking if the ultrasonic sensor is lower than the object-threshold
+    // -> object detected
+    if (SensorUS(IN_4) < NEAR) {
+       return STATE_DETECTED_OBJECT;
+    }
+    //Otherwise stay in the normal drive state
+    return STATE_SAFE_ON_TABLE;
+}
+
+
+//Function to correct the alignment of the robot depending on the line
+int correctLane(){
+    //Check if the robot have to do a left-turn
+    while(Sensor(IN_1) < THRESHOLD){
+         //Check if the third and the second light sensor also lower
+         //than their threshold -> stop line
+         while(Sensor(IN_3) < 35 && Sensor(IN_2) < THRESHOLD){
+            Off(OUT_AB);
+         }
+         //Otherwise do a left turn while sensor one detects a edge
+         OnFwd(OUT_A,80);
+         OnRev(OUT_B,50);
+         OnFwd(OUT_AB,30);
+    }
+    //Check if the robot have to do a right-turn
+    while(Sensor(IN_2) < THRESHOLD) {
+         OnFwd(OUT_B,50);
+         OnRev(OUT_A,50);
+         OnFwd(OUT_AB,30);
+    }
+    return STATE_SAFE_ON_TABLE;
+}
+
+
+//Function to stop the robot, while there is a object in front of him
+int detectedObject(){
+    while(SensorUS(IN_4) < NEAR){
+         Off(OUT_AB);
+    }
+    return STATE_SAFE_ON_TABLE;
+}
+
+
+int state = STATE_INIT; //initializing the beginning state
+
+
+//Main function to execute the whole programm
+task main(){
+     while(true){
+                 if(state == STATE_INIT) {
+                          //First drive forward and realign the robot to cross the start-line
+                          OnFwd(OUT_AB,50);
+                          Wait(1000);
+                          OnFwd(OUT_A,50);
+                          OnRev(OUT_B,50);
+                          Wait(100);
+                          //Than initialize the sensors
+                          state = initialize();
+                 }
+                 //If everything is ok, just drive an check the sensors
+                 if(state == STATE_SAFE_ON_TABLE) {
+                          state = drive();
+                 }
+                 //If a edge is detected, realign the robot
+                 if(state == STATE_DETECTED_EDGE) {
+                          //Also checking, if the robot is on the stop-line
+                          while(Sensor(IN_3) < 35 && Sensor(IN_1) > THRESHOLD && Sensor(IN_2) > THRESHOLD){
+                              Off(OUT_AB);
+                          }
+                          //Correcting the alignment of the robot
+                          state = correctLane();
+                 }
+                 //If a object is detected in front of the robot execute detectedObject
+                 if(state == STATE_DETECTED_OBJECT){
+                          state = detectedObject();
+                 }
+     }
+}
